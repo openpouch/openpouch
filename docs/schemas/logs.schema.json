@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/logs.schema.json",
+  "title": "openpouch logs result",
+  "description": "`openpouch logs --json [--limit N]` / MCP `openpouch_logs`. On the instant lane the lines carry the captured install/build/app phases (tagged [install]/[build]/[app], ANSI-stripped, real per-line timestamps) — the self-repair loop reads the CAUSE here. Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "environment", "serviceId", "count", "logs"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string" },
+    "environment": { "type": "string" },
+    "serviceId": { "type": "string" },
+    "count": { "type": "number" },
+    "requestedLimit": {
+      "type": "number",
+      "description": "Echo of the effective --limit (default 50). count < requestedLimit means the full available tail was returned — there is no pagination. Present from the release after 0.2.15 (additive)."
+    },
+    "logs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "timestamp": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

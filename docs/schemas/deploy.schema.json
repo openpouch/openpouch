@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/deploy.schema.json",
+  "title": "openpouch deploy result (instant lane success)",
+  "description": "Successful `openpouch deploy [dir] --json` / MCP `openpouch_deploy`. Contract: `required` is guaranteed; results evolve ADDITIVELY. Failures use error.schema.json instead. Exactly one of `claimUrl` (default) or `claimUrlRedacted: true` (--redact-secrets / MCP default) is present.",
+  "type": "object",
+  "required": ["ok", "summary", "url", "authenticated", "claimUrlIsPrivate", "pending", "healthStatus", "nextCommands", "deployment", "evidence"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string", "description": "Relay verbatim to your human." },
+    "url": { "type": "string", "format": "uri", "description": "THE primary result: the live, publicly shareable address." },
+    "authenticated": { "type": "boolean", "description": "true = ran under an openpouch account key; false = anonymous free tier." },
+    "claimUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "SECRET save link (carries a one-time token — treat like a password; hand it to your human PRIVATELY, never into shared reports). The shareable address is `url`, never this."
+    },
+    "claimUrlRedacted": { "const": true, "description": "Present instead of claimUrl when redaction is on; the real link is stored locally in .openpouch/claim.json (0600, gitignored)." },
+    "claimUrlIsPrivate": { "const": true },
+    "envVars": { "type": "array", "items": { "type": "string" }, "description": "Env var NAMES set on the app — values are never echoed anywhere." },
+    "pending": { "type": "boolean", "description": "true = container not answering yet; re-check with `openpouch verify` before sharing." },
+    "healthStatus": {
+      "enum": ["healthy", "degraded", "pending"],
+      "description": "Post-deploy GET / gate: `healthy` = 200 observed; `degraded` = live but not answering 200 — do NOT share the URL, run the self-repair loop; `pending` = still starting."
+    },
+    "healthPathCheck": {
+      "type": "object",
+      "description": "Present when --health-path ran: the extra API-route probe (full-stack bar).",
+      "required": ["path", "passed"],
+      "properties": {
+        "path": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "httpStatus": { "type": "number" }
+      }
+    },
+    "nextStep": { "type": "string", "description": "Present on pending/degraded results: the exact next move." },
+    "nextCommands": {
+      "type": "object",
+      "description": "Copy-paste follow-ups, health-path aware — no flag reconstruction needed.",
+      "required": ["verify", "logs", "inspect"],
+      "properties": {
+        "verify": { "type": "string" },
+        "logs": { "type": "string" },
+        "inspect": { "type": "string" }
+      }
+    },
+    "dataDurability": {
+      "type": "object",
+      "description": "Present when the app writes local data: an ephemeral preview will NOT keep it — tell your human plainly.",
+      "required": ["storesData", "ephemeral"],
+      "properties": {
+        "storesData": { "const": true },
+        "ephemeral": { "const": true },
+        "signals": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["id", "url", "expiresAt", "status", "kind", "framework"],
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "claimUrl": { "type": "string", "format": "uri", "description": "Omitted under redaction." },
+        "expiresAt": { "type": "string", "description": "ISO timestamp — unclaimed previews expire (~72h)." },
+        "status": { "type": "string" },
+        "kind": { "enum": ["static", "dynamic"] },
+        "framework": { "type": ["string", "null"] },
+        "buildCommand": { "type": "string" },
+        "startCommand": { "type": "string" },
+        "httpStatus": { "type": "number" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The truth files written into the repo — re-reading them is always sufficient to resume."
+    },
+    "feedbackHint": { "type": "string" }
+  }
+}

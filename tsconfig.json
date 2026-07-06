@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openpouch/core": ["packages/core/src/index.ts"],
+      "@openpouch/adapter-render": ["packages/adapter-render/src/index.ts"],
+      "@openpouch/adapter-vercel": ["packages/adapter-vercel/src/index.ts"],
+      "@openpouch/adapter-run": ["packages/adapter-run/src/index.ts"],
+      "@openpouch/cli": ["packages/cli/src/main.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "vitest.config.ts"]
+}

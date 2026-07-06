@@ -1,0 +1,20 @@
+{
+  "name": "@openpouch/core",
+  "version": "0.0.0",
+  "description": "openpouch core: manifest/policy/evidence schemas, policy engine, provider adapter interface",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "^3.25.0"
+  }
+}

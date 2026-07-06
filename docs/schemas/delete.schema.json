@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/delete.schema.json",
+  "title": "openpouch delete result",
+  "description": "`openpouch delete <slug> --json` / MCP `openpouch_delete` — removes one of the ACCOUNT'S OWN deployments and frees a quota slot. Owner-only and auth-gated by design: anonymous callers receive error.schema.json with category `auth` (anonymous previews can't be deleted manually — they expire on their own). Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "slug"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string" },
+    "slug": { "type": "string" },
+    "kind": { "enum": ["static", "dynamic"] }
+  }
+}

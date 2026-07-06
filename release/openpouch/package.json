@@ -1,0 +1,39 @@
+{
+  "name": "openpouch",
+  "version": "0.2.15",
+  "description": "openpouch 🦘 — agent-native hosting, built for coding agents. Deploy any folder to a live URL in one command: npx openpouch deploy",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "openpouch": "openpouch.js"
+  },
+  "files": [
+    "openpouch.js",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "deployment",
+    "deploy",
+    "cli",
+    "ai-agents",
+    "agent",
+    "mcp",
+    "devops",
+    "render",
+    "vercel",
+    "preview"
+  ],
+  "homepage": "https://openpouch.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpouch/openpouch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openpouch/openpouch/issues"
+  }
+}

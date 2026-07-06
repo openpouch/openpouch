@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/error.schema.json",
+  "title": "openpouch error result",
+  "description": "The universal failure shape of every openpouch CLI command (--json) and MCP tool. Contract: `required` fields are guaranteed; results evolve ADDITIVELY (new optional fields may appear — do not reject unknown properties). Exit codes are documented in CLI.md.",
+  "type": "object",
+  "required": ["ok", "summary", "error"],
+  "properties": {
+    "ok": { "const": false },
+    "summary": {
+      "type": "string",
+      "description": "Plain-language, jargon-free text written for the (possibly non-technical) human — relay it verbatim."
+    },
+    "error": {
+      "type": "object",
+      "required": ["category", "message", "fix"],
+      "properties": {
+        "category": {
+          "enum": ["usage", "env", "auth", "quota", "provider", "network", "policy-denied", "approval-required", "human-required", "internal"],
+          "description": "Stable machine-readable failure class. `network` = the openpouch API could not be reached at all (DNS/refused/timeout/TLS) — an environment problem, not an app problem."
+        },
+        "message": { "type": "string", "description": "What failed, technically." },
+        "fix": { "type": "string", "description": "Actionable guidance written for agents — always present." },
+        "suggestedCommand": {
+          "type": "string",
+          "description": "Present only when there is exactly ONE unambiguous, directly-runnable next command (no placeholders)."
+        },
+        "failureLogs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "On a failed dynamic/static-build deploy: the last lines of the server-captured build/startup output — the failed record is removed server-side, so this is the only window into WHY. Feed your self-repair loop from here."
+        }
+      }
+    },
+    "approvalRequest": {
+      "type": "object",
+      "description": "Present with category `approval-required`: the pending human-approval request (ask your human to run `openpouch approve <id>` in their own terminal).",
+      "required": ["id"],
+      "properties": { "id": { "type": "string" } }
+    },
+    "feedbackHint": {
+      "type": "string",
+      "description": "Optional, error-results only: how to send opt-in friction feedback. Never required, never blocks."
+    }
+  }
+}

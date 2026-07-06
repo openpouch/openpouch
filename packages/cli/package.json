@@ -1,0 +1,27 @@
+{
+  "name": "@openpouch/cli",
+  "version": "0.0.0",
+  "description": "openpouch 🦘 CLI — agent-native deployment control plane",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "openpouch": "./bin/openpouch.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "dependencies": {
+    "@openpouch/adapter-render": "*",
+    "@openpouch/adapter-run": "*",
+    "@openpouch/adapter-vercel": "*",
+    "@openpouch/core": "*"
+  }
+}

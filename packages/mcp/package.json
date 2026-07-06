@@ -1,0 +1,27 @@
+{
+  "name": "@openpouch/mcp",
+  "version": "0.0.0",
+  "description": "openpouch 🦘 MCP server — deploy tools for ANY MCP-capable agent harness (stdio, open standard)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "openpouch-mcp": "./bin/openpouch-mcp.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@openpouch/cli": "*",
+    "@openpouch/core": "*",
+    "zod": "^3.25.0"
+  }
+}

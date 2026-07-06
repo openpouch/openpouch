@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a new capability or an improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before building anything substantial, please open the proposal first — see [CONTRIBUTING.md](../../CONTRIBUTING.md). Two design invariants are non-negotiable: **harness neutrality** (no feature exclusive to one agent harness) and **no agent-accessible production approve**.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you (or your agent) do today? Concrete scenario beats abstract capability.
+      placeholder: |
+        My agent deploys a preview, but then it has to …
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should openpouch do? If you have a CLI/MCP surface in mind (flags, JSON fields, tool shape), sketch it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you're using today, or other designs you rejected.
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Would you build it?
+      options:
+        - I'd like to implement this myself (maintainers can mentor)
+        - I could help test/review
+        - Proposal only
+    validations:
+      required: true

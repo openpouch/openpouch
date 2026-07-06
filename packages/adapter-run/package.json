@@ -1,0 +1,20 @@
+{
+  "name": "@openpouch/adapter-run",
+  "version": "0.0.0",
+  "description": "openpouch provider adapter for the instant lane (openpouch-run): anonymous ephemeral previews, deploy-then-claim",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@openpouch/core": "*"
+  }
+}

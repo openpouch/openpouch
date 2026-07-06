@@ -1,0 +1,38 @@
+{
+  "name": "@openpouch/mcp",
+  "version": "0.2.15",
+  "mcpName": "io.github.openpouch/openpouch",
+  "description": "openpouch 🦘 MCP server — agent-native deploy tools for any MCP-capable harness (Claude Code, Codex, Cursor, Windsurf, …). stdio, open standard. No approve tool — production approval stays human-only.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "openpouch-mcp": "openpouch-mcp.js"
+  },
+  "files": [
+    "openpouch-mcp.js",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "deployment",
+    "deploy",
+    "ai-agents",
+    "agent",
+    "openpouch"
+  ],
+  "homepage": "https://openpouch.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpouch/openpouch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openpouch/openpouch/issues"
+  }
+}

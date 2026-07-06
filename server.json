@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.openpouch/openpouch",
+  "description": "Agent-native hosting: deploy any folder to a live URL in one command. No approve tool.",
+  "version": "0.2.15",
+  "repository": {
+    "url": "https://github.com/openpouch/openpouch",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@openpouch/mcp",
+      "version": "0.2.15",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

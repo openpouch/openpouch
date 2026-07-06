@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/list.schema.json",
+  "title": "openpouch list result",
+  "description": "`openpouch list --json` / MCP `openpouch_list` — the account's own live deployments (self-service quota view). Anonymous callers get authenticated:false with an empty list (anonymous previews aren't grouped under an account). Secret-free. Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "authenticated", "count", "deployments"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string" },
+    "authenticated": { "type": "boolean" },
+    "count": { "type": "number" },
+    "deployments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "slug", "status", "url", "createdAt", "expiresAt", "claimed"],
+        "properties": {
+          "id": { "type": "string" },
+          "slug": { "type": "string", "description": "Use with `openpouch delete <slug>` to free a quota slot." },
+          "status": { "enum": ["live", "expired"] },
+          "url": { "type": "string", "format": "uri" },
+          "kind": { "enum": ["static", "dynamic"] },
+          "createdAt": { "type": "string" },
+          "expiresAt": { "type": "string" },
+          "claimed": { "type": "boolean" },
+          "runtimeStatus": { "type": "string", "description": "Dynamic only: container lifecycle state." }
+        }
+      }
+    }
+  }
+}

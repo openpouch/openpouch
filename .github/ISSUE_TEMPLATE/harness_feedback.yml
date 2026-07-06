@@ -1,0 +1,59 @@
+name: Harness feedback (agent friction report)
+description: Your agent hit friction, confusion, or a dead end while using openpouch. This is the feedback we value most.
+title: "harness: "
+labels: ["harness-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        openpouch is built for agents — anywhere an agent needed a human when it shouldn't have, or misread our output, is a bug in *our* product, not in your agent. Reports written by the agent itself are explicitly welcome.
+
+        ⚠️ **Redact secrets** (claim tokens `op_claim_…`, API keys, `.env` values) before submitting.
+  - type: input
+    id: harness
+    attributes:
+      label: Harness and model
+      placeholder: "Claude Code / claude-fable-5 · Codex · OpenClaw · Hermes · Cursor · …"
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What the agent was trying to do
+      placeholder: |
+        Deploy a full-stack Express + React app and hand the preview URL to the user.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where it got stuck or confused
+      description: The exact moment things went sideways. Verbatim command + output (redacted) is gold — include what the agent *concluded* from the output, especially if that conclusion was wrong.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: What would have made it self-serve
+      description: What output, JSON field, doc line, or behavior would have let the agent recover on its own?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: openpouch version
+      placeholder: "0.2.14"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad was it?
+      options:
+        - Dead end — task failed, human had to step in
+        - Detour — agent recovered, but wasted steps/tokens
+        - Confusion — worked, but output was misleading
+        - Paper cut — cosmetic, still worth fixing
+    validations:
+      required: true

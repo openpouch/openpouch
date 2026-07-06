@@ -1,0 +1,191 @@
+# Instant lane (openpouch-run) — spec & operations
+
+**As of:** 2026-07-02 · **Status: M1 (static previews) BUILT + LIVE** on openpouch's own infra; **M2 (dynamic Node apps in containers) BUILT + LIVE** — public on the production box since the B2 go-live (2026-06-14; build-on-deploy and instant-lane env vars rolled out through 2026-06-30), cross-harness-proven (OpenClaw full-stack PASS 2026-06-29). The **code default stays off** (`OPENPOUCH_RUN_DYNAMIC_ENABLED` unset → run-d behaves bit-for-bit like M1, so a *self-hosted* run-d is static-only until its operator opts in); the openpouch.sh box runs with it on. Real-container validation via the opt-in Docker E2E; box operations/drill records live in the business SSOT. **B3 account/API-key/quota subsystem BUILT** (key-optional, default-safe — see §Accounts + [ACCOUNTS.md](ACCOUNTS.md)). Derived from `packages/run` (`server.ts`, `store.ts`, `detect.ts`, `engine.ts`, `ports.ts`, `router.ts`, `proxy.ts`, `orchestrator.ts`, `accounts.ts`, `auth.ts`, `quota.ts`, `mailer.ts`, `github.ts`), `packages/adapter-run`, and `packages/cli/src/commands/instant.ts`.
+
+The instant lane is the zero-config first mile (SSOT D11): `openpouch deploy` from any directory uploads the project and returns a live URL plus a claim link — no account, no provider key, no manifest. The agent deploys autonomously (preview-class); the human claims via the link (deploy-then-claim, Netlify pattern). It is **the third provider adapter**, not a special case — manifest, policy, evidence, and the MCP tool surface are unchanged (harness-neutrality rule D13).
+
+## Components
+
+| Piece | Package | Role |
+|---|---|---|
+| run-d daemon | `@openpouch/run` | HTTP API: accept tarball, extract, register, serve lifecycle; JSON registry; 5-min expiry reaper. Zero third-party runtime deps (Node builtins only). |
+| adapter | `@openpouch/adapter-run` | `ProviderAdapter` (read path over run-d's API) **plus** `instantDeploy(tarball)`. |
+| CLI | `openpouch deploy` | packages cwd → `instantDeploy` → writes manifest/policy/evidence back into the repo. |
+| edge | Caddy + Cloudflare DNS-01 | wildcard TLS for `*.openpouch.sh`, static vhosting by subdomain label, reverse-proxy of the API. |
+
+## run-d HTTP API (M1)
+
+Base: the run-d origin (production: `https://openpouch.sh`, reverse-proxied to `127.0.0.1:8787`). All bodies/replies JSON except the deploy upload (gzipped tarball).
+
+| Method · path | Purpose | Notes |
+|---|---|---|
+| `GET /healthz` | liveness | `{ok:true,service:"openpouch-run"}` |
+| `GET /` | branded landing on the **apex host**; a `<slug>` subdomain with no live record gets a neutral white-label `404` (D24) | apex = one-command pitch + `noindex`; subdomain = brand-free |
+| `POST /api/deployments` | create preview | body = gzipped tarball; header `X-Openpouch-Project` = name hint; **optional `Authorization: Bearer <key>`** (B3 — runs under that account's quota tier; no header = anonymous tier, PRD R5); size cap 25 MB; rate-limited per IP (anonymous). → 201 `{id,slug,url,claimUrl,claimToken,expiresAt,status,kind}`. `kind` is `"static"` or `"dynamic"` (M2). A dynamic deploy builds+starts a container **synchronously** (request held up to ~build+health timeout); a failed build/start → **422** `{ok:false,error,logs}` and nothing is registered. The dynamic lane has its own lower cap → **503** when full. A presented-but-invalid/revoked/suspended key → **401**; a per-account quota breach → **413/429** with `{error,fix,reason}`. |
+| `GET /api/deployments` | **list your own** (B3 self-service — `openpouch list`) | `Authorization: Bearer <key>` **required** (401 anonymous) → `{ok,deployments:[{id,slug,status,url,kind,createdAt,expiresAt,claimed,runtimeStatus?}]}`; only the caller's account's **live** records, secret-free (no capability token / accountId / container internals) |
+| `GET /api/deployments/:id` | status (public view) | never returns capability tokens |
+| `GET /api/deployments/:id/logs` | deploy events | `{ok,logs:[{timestamp,message}]}`. **Timestamps are real per-phase moments** (OpenClaw 2026-07-04): each deploy-phase event stamps when it actually happened and milestones carry durations (`dependencies installed (took 8231 ms)`, `live (…, ready in 950 ms)`); a phase's captured output lines share the phase-END capture time, kept strictly increasing by the store. **Owner-gated (multi-tenancy):** a record owned by an account (`accountId` set) returns its captured install/build/app output **only** to that account's key — a non-owning key or no key gets **404** (never leaks another account's logs, nor reveals the slug is keyed). An **anonymous** deployment (no `accountId`) stays readable by slug (its slug is already public; M1 design). |
+| `POST /api/deployments/:id/claim` | claim | body `{token}` (the claimToken) → extends to 7 days, returns `{expiresAt,mgmtToken}`; single-use |
+| `DELETE /api/deployments/:id` | delete | **owner path (B3 — `openpouch delete`):** `Authorization: Bearer <key>` deletes your OWN deployment (server-verified owner; another account → **403** `not-owner`) and frees the slot. **Legacy path:** body `{mgmtToken}` (the claim flow). When a key resolves, only the owner-checked path runs — never a tokenless fallthrough. → `{ok,slug,kind}` |
+| `POST /api/report` | report abuse | body `{slug, reason?, email?}` → appended to `reports.jsonl`; rate-limited |
+| `POST /api/admin/takedown` | operator force-takedown | header `x-admin-token`; body `{slug}`; removes any preview incl. claimed. **Blocked at the public edge (Caddy → 404); reachable only on localhost** |
+| `GET /claim/:id` | claim page with a working "Claim preview" button | reads `?token=`, POSTs to the claim API; `noindex` |
+
+### Slug (the `<slug>` in `https://<slug>.openpouch.sh`)
+
+Format `<base>-<suffix>` — DNS-label-safe, lowercase. Assembled server-side in `packages/run/src/store.ts` (`freshSlug`). For an anonymous preview the URL is the **only** access control, so the random part must stay unguessable.
+
+- **`base` — a human-readable project hint** (variable length). The CLI derives a hint in `packages/cli/src/commands/instant.ts` (`projectHint`), in order: (1) `package.json` `name` with any npm scope `@scope/` stripped; (2) else the **directory basename**; (3) else `"joey"`. It travels to run-d as the `X-Openpouch-Project` header and is **sanitised** there (`sanitizeHint`): `toLowerCase()` → replace every run of `[^a-z0-9-]` with `-` → collapse repeated `-` → trim leading/trailing `-` → **truncate to 24 chars**; an empty result falls back to `"joey"`.
+  - ⚠️ The hint is read from the **current working directory** (`projectHint(ctx.cwd)`), **not** from an explicit `deploy <dir>` target. So `cd dist && openpouch deploy` yields base `dist` (dir name, no `package.json` there), whereas `openpouch deploy dist` from a project root yields the **root**'s name. Known minor inconsistency — the slug reflects the cwd, not the shipped folder; not yet reconciled.
+- **`suffix` — 6 random characters** (constant length). `randomSlugSuffix(len = 6)`: `crypto.randomBytes(len)`, each byte mapped `% 36` onto `SLUG_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"`. Always exactly **6** chars from `[a-z0-9]` → 36⁶ ≈ 2.2 × 10⁹ possibilities. (A sequential counter would be guessable/enumerable and is deliberately avoided.)
+- **Uniqueness** (`freshSlug`): assemble `base + "-" + suffix(6)`, retry up to **50×** if the slug is already registered; only if all 50 collide (astronomically unlikely) widen to a **12**-char suffix.
+- **Bounds**: common-path length ≤ 24 (base) + 1 + 6 = **31** chars. The dynamic-lane wrapper independently re-validates the slug as `^[a-z0-9][a-z0-9-]{0,39}$` before any container is touched (`op-docker.sh`, §B1).
+
+**Worked examples**: `dist-6iyssb` = base `dist` (directory name) + random `6iyssb`; `openpouch-test-60fqrj` = base `openpouch-test` (project name) + random `60fqrj`. Both random suffixes are 6 chars — only the project-name prefix differs in length.
+
+**Lifecycle / TTL**: unclaimed previews expire after **72 h**; a claim extends to **7 days** (M1). The reaper sweeps every 5 minutes, deleting expired site dirs + records. Cost control per D11.
+
+**Safety**: `extractTarball` (`packages/run/src/tar.ts`) unpacks into an isolated per-slug dir in **five passes (0–4)**: (0) **reject a decompression bomb** — stream-decompress the gzip (`createGunzip`) counting output bytes and abort *before any tar work or disk write* if the uncompressed size would exceed `maxUnpackedBytes` (`OPENPOUCH_RUN_MAX_UNPACKED_BYTES`, default **512 MB**; `0` disables). `readBody` only caps the *compressed* upload (25 MB), but gzip's ratio is unbounded — a ~25 MB upload can expand to many GB and fill the shared volume during `tar -xzf` (the watchdog only warns at 85 %); this O(1)-memory guard stops the fill before it starts. (1) list the archive (`tar -tzf`) and reject any member with an absolute path or a `..` segment; (2) extract; (3) **reject symlinks** — walk the extracted tree (`readdir` + `isSymbolicLink()`) and refuse the whole deploy on the first symlink found; (4) `chmod -R a+rX` so the static file server (a different OS user than run-d) can read/traverse the tree. **Pass 3 is security-critical and a rebuild MUST reproduce it:** `tar -tzf` lists member names but never their symlink *targets*, so a benignly-named symlink (e.g. `data` → `../../registry.json`, relative — it survives the atomic rename into `sites/<slug>/`) passes the name check; the static file server (Caddy `file_server`) follows symlinks out of the site root by default, and the registry (`registry.json`, holding claim/mgmt tokens in cleartext) sits above that root — so without pass 3 a single anonymous request reads the platform-wide token registry = full takeover. A static preview never needs a symlink, so the whole deploy is refused rather than trying to classify "safe" targets. **No user code runs** (M1 is static-only — minimal foreign-execution surface). Every preview is served with `X-Robots-Tag: noindex, nofollow`. **Per-IP attribution** (rate limiter + `reports.jsonl`) uses `clientIp` (`server.ts`), which reads the **right-most** `X-Forwarded-For` hop — the one openpouch's own Caddy appends — never the client-spoofable left-most (a rebuild reading the left-most, or the raw header, reopens per-IP-limiter rotation via a forged `X-Forwarded-For`); it assumes run-d always sits behind the trusted Caddy proxy, falling back to the socket peer. Per-IP rate limit (default 10/h, 30/day). **Global deployment cap** (`OPENPOUCH_RUN_MAX_DEPLOYMENTS`, default 500 → `503` when full) guards the disk even within rate limits. Claim/mgmt/admin capability tokens are compared in **constant time** (`constantTimeEqual`). **Resource-exhaustion hardening:** captured build/app output is bounded per stream (~1 MB **tail**, `spawnCollect`/`appendBounded`) so a runaway child can't balloon run-d's heap before the build timeout; the per-IP limiter map and the OAuth-state map are pruned in the 5-min `sweep` (lifetime-bounded), and the unauthenticated `GET /api/auth/github/start` is itself per-IP rate-limited. No custom domains. Public `POST /api/report` collects abuse reports; operators force-take-down via the localhost-only admin route (see runbook).
+
+## Accounts / API keys / quotas (B3)
+
+run-d also hosts the account/API-key/quota subsystem (SSOT D16) — **fully specified in [ACCOUNTS.md](ACCOUNTS.md)** (data model, auth flows, quota engine, every endpoint, config, security). In brief, relative to this lane:
+
+- **Key is optional (PRD R5/R8):** no `Authorization` header → the anonymous tier (per-IP limiter + the global caps above, exactly as today). A valid `op_live_…` key → that account's tier (configurable per-account quotas: rate, concurrency, size, dynamic count) and the deployment is **owned** by the account (`accountId` on the record; counts derived for quotas + `GET /api/account`).
+- **Key-gating switch (`OPENPOUCH_RUN_REQUIRE_KEY`, default off):** the "anonymous lane → key-gated" capability D16 asks for. On → keyless deploys get a 401 with a create-a-key fix (never a CAPTCHA, R8). Default off keeps R5 intact.
+- **New routes** (agent-usable, no human check): `POST /api/accounts` + `POST|GET /api/accounts/verify` (email signup), `GET /api/auth/github/{start,callback}` (GitHub, dormant unless configured), `GET /api/account`, `POST|GET /api/keys`, `DELETE /api/keys/:keyId`, and operator `POST /api/admin/accounts/:id/{tier,status}`.
+- **State:** `accounts.json` (keys stored only as `sha256(secret)`); email delivery uses the dependency-free `SmtpMailer` when `OPENPOUCH_RUN_SMTP_HOST` is set, otherwise spools to `mail.outbox.jsonl` (default-safe).
+- **Dormant until owner action (DINO):** GitHub OAuth app, an SMTP credential to activate the (built) mailer, the tier numbers (provisional until dogfood), and the box rollout of this build — see ACCOUNTS.md §10.
+
+## Core configuration (env, M1 — all defaulted)
+
+`configFromEnv` (`packages/run/src/server.ts`) reads, with defaults: `OPENPOUCH_RUN_DATA_DIR` (`/var/openpouch`) · `OPENPOUCH_RUN_PORT` (`8787`, bound to 127.0.0.1) · `OPENPOUCH_RUN_BASE_DOMAIN` (`openpouch.sh`) · `OPENPOUCH_RUN_PUBLIC_BASE` (`https://<baseDomain>`) · `OPENPOUCH_RUN_MAX_BYTES` (`26214400` = 25 MB, the compressed upload cap) · `OPENPOUCH_RUN_MAX_UNPACKED_BYTES` (`536870912` = 512 MB, the decompressed-size / gzip-bomb ceiling; `0` disables) · `OPENPOUCH_RUN_RATE_HOUR` (`10`) · `OPENPOUCH_RUN_RATE_DAY` (`30`) · `OPENPOUCH_RUN_MAX_DEPLOYMENTS` (`500`) · `OPENPOUCH_RUN_ADMIN_TOKEN` (empty → `/api/admin/*` disabled) · `OPENPOUCH_RUN_ABUSE_CONTACT` (`abuse@openpouch.sh`). The M2 dynamic-lane vars are listed in §M2 → configuration. (Client side: the CLI's target API override is `OPENPOUCH_RUN_API`, default `https://openpouch.sh` — see CLI.md.)
+
+## Abuse runbook (operator)
+
+1. **Find the slug** — from the report (`reports.jsonl`), the URL `<slug>.openpouch.sh`, or `deploy.evidence.json`.
+2. **Take it down** (on the box; the admin route is not publicly reachable):
+   ```bash
+   set -a; . /etc/openpouch-run/admin.env; set +a
+   curl -X POST http://127.0.0.1:8787/api/admin/takedown \
+     -H "x-admin-token: $OPENPOUCH_RUN_ADMIN_TOKEN" \
+     -H 'content-type: application/json' -d '{"slug":"<slug>"}'
+   ```
+   The preview returns `410` immediately (files + registry entry removed). Works on claimed previews too (force).
+3. Reports live in `<dataDir>/reports.jsonl`; the admin token in `/etc/openpouch-run/admin.env` (root, 600).
+
+**Registry**: a JSON file (`<dataDir>/registry.json`) written atomically (temp + rename); one single-threaded process, so writes are serialized without a lock. SQLite is a planned hardening step — JSON keeps M1 free of native deps (repo rule: zod is the only third-party dep, and run-d uses none).
+
+## CLI: `openpouch deploy`
+
+Zero-config instant deploy. Optional `dir` positional picks the folder to ship (default cwd; e.g. `openpouch deploy dist`). **Redeploys** when an existing `deploy.manifest.json` is an instant-lane one (every env provider `openpouch-run`); only **refuses** (exit 2) for a *governed* manifest (a render/vercel env → use `preview`/`prod`). Without an explicit `dir`, an **unbuilt-frontend** root (a dev `index.html` referencing source modules, or no `index.html` + a build script + a `src/` dir) is refused with the build dir to deploy named in the `fix` (`openpouch deploy .` bypasses). Steps: detect a name hint (package.json `name`, scope stripped, else dir basename) → **detect the framework + build/start commands** from the project root (same detector as `init`, so `inspect` / the manifest aren't `framework: null` for Vite/Next/Express — P1) → `tar -czf` the target dir (excludes `node_modules`, `.git`, `dist`, `build`, `.next`, `coverage`, `.vercel`, `.turbo`, `.openpouch`) → `instantDeploy` → write `deploy.manifest.json` (`project.framework` + `build.{buildCommand,startCommand}` when detected, env `preview` → provider `openpouch-run`, serviceId = slug, url), `deploy.policy.json` (default), and append `deploy.evidence.json` (with the source `commit` from `git rev-parse HEAD` when the folder is a repo — P2) + `DEPLOYMENT.md`. Exit codes per CLI.md. Override the target API with `OPENPOUCH_RUN_API` (self-hosting / tests).
+
+**Deploy-health gate (client-side, `instant.ts`).** `status: "live"` from run-d means the container *started*, not that it *serves* `/`: a dynamic app whose `start` runs an Express server over an unbuilt React `dist/` answers `404` on `/`. So after a `live` result the CLI runs a short **GET / smoke** (`runSmokeChecks`, shared with `verify`), polling until `200` or a budget elapses (`OPENPOUCH_INSTANT_SMOKE_TIMEOUT_MS` ms, default `15000`; `0` disables it) — the poll absorbs the 1–3 s a dynamic container may 502/404 right after "live". Outcome → top-level **`healthStatus`**: `"healthy"` (200; `summary` invites sharing), `"degraded"` (non-200; `ok` stays true but `summary`/`nextStep` say *don't share — fix via `openpouch logs` → redeploy → `verify`*, and `deployment.httpStatus` carries the code), or `"pending"` (still `building`/`queued`, not probed — R9.10). This is the **"deploy ok ≠ app healthy"** guard: an agent that forgets to run `verify` still won't relay a dead link. **`--health-path <p>`** raises the bar for full-stack apps: after `/` passes, the CLI also probes the given path (e.g. `/api/health`) and reports `healthPathCheck` — non-200 → `degraded` (a live shell can hide a dead API; OpenClaw 2026-07-04). Full field shape in [CLI.md](CLI.md) §`openpouch deploy`.
+
+## M2 — dynamic apps (container runtime)
+
+**Status: BUILT + LIVE on the production box** (public since the B2 go-live 2026-06-14); the **code default stays off** for safety. M2 lets `openpouch deploy` run an actual Node app (Express/Fastify/HTTP server) instead of only serving files. It is gated by `OPENPOUCH_RUN_DYNAMIC_ENABLED=1` — **with the flag off, run-d behaves bit-for-bit like M1** (every upload is static, no container engine is constructed), so a self-hosted run-d stays static-only until its operator opts in; openpouch.sh runs with the flag on. The foreign-code-execution policy — locked-down containers (capability drop, no-new-privileges, resource limits), an egress filter (DNS + HTTP/HTTPS only), short TTLs, a global capacity cap, and report + operator takedown — is summarized in [SECURITY.md](../SECURITY.md).
+
+### Static vs dynamic detection (`detect.ts`)
+
+After extraction, `classifyUpload(dir)` decides (fail-safe → static on any ambiguity, so foreign code never runs on a guess):
+
+1. No `package.json`, or malformed `package.json` → **static**.
+2. `scripts.start` (non-empty) → **dynamic**, start command `npm start`.
+3. else `main` pointing at a file that exists inside the upload → **dynamic**, `node <main>`.
+4. else a conventional entry at the root (`server.js`, `app.js`, `index.js`, `main.js`, `server.mjs`, `index.mjs`, `app.mjs`, first match) → **dynamic**, `node <entry>`.
+5. else a `build` script **and** unbuilt-SPA markers (a root `index.html` referencing source modules — the Vite/CRA dev entry — or a `src/` dir) → **`static-build`** (PRD L9): build the SPA, then serve its output as files. `outputDirs` = `["dist", "build", "out"]`.
+6. `package.json` but no resolvable start and nothing to build (e.g. an already-built static site) → **static**.
+
+A `build` script on a **dynamic** plan (rules 2–4) also sets `DynamicPlan.buildCmd` — the server has a *running* app, so it's built and run in a container. A `build` script with **no** server (rule 5) is `static-build` — there's nothing to run, so the output is served as files. `hasLockfile` = `package-lock.json` or `npm-shrinkwrap.json` present → install uses `npm ci --ignore-scripts`; otherwise `npm install --ignore-scripts --no-audit --no-fund`. **npm-only** in this increment (proposal §5).
+
+**`static-build` lifecycle (`orchestrator.buildStatic`).** Install → `npm run build` (both in the same hardened throwaway build container as the dynamic lane, via the `buildapp` verb) → find the first `outputDirs` entry holding an `index.html` → **promote it to the served root** (move the output dir over the source, drop source + `node_modules`) → `chmod -R a+rX` so the file server can read it (the build container's output bypasses the tar extraction's chmod). No port, no container, no Caddy route — the record's `kind` is **`static`**, served by the existing wildcard `file_server`. A build that yields no `index.html` → 422 (the source is left for the caller to clean up). `[install]`/`[build]` output is captured into the event log like the dynamic lane.
+
+### Lifecycle (`orchestrator.ts` + `engine.ts`)
+
+Each dynamic deploy gets two hardened containers sharing the slug's site dir (bind-mounted `:/app` read-write, so `node_modules` persists for fast restarts):
+
+1. **Install** — throwaway container runs the install command (`npm ci/install --ignore-scripts`; egress on for the npm registry; build timeout ~120 s). On failure → 422 with the captured logs, record + dir removed.
+2. **Build (build-on-deploy, PRD L9)** — **if the project has a `build` script**, a second throwaway container (same hardened profile) runs `npm run build`; its output (`dist/`, `.next/`, …) lands in the shared site dir, so a server-side framework app (e.g. Express serving a Vite/React build) has its assets *before* it starts — closing the root cause of "deploy ok but `/` 404". On failure → 422 with the captured build logs, record + dir removed. No `build` script → step skipped.
+3. **Create + start** — `docker create` then `start` the run container (one process, `PORT` injected, host port published on `127.0.0.1`).
+4. **Health-wait** — poll `http://127.0.0.1:<hostPort>/` until any HTTP response (timeout ~45 s). On failure → container logs captured, container removed, 422.
+5. **Route** — the slug's host is added to the Caddy dynamic route (below).
+
+The build command is decided by `classifyUpload` (`detect.ts`): a non-empty `scripts.build` → `DynamicPlan.buildCmd = "npm run build"`. Run via the `buildApp` engine method — `DockerEngine.buildApp` directly, or `WrapperEngine.buildApp` → the `buildapp` verb in `op-docker` (same fixed hardening as `build`; the build command reaches `sh -c` as one argv, so it can't escape the sandbox). **Still npm-only and `--ignore-scripts` for install** (no arbitrary postinstall hooks); `npm run build` runs the project's *explicit* build script, the same trust boundary as running the app itself.
+
+**Log depth (`orchestrator.recordOutput`).** Beyond the lifecycle one-liners (`building …`, `dependencies installed`, `app build ok`, `live …`), the install stdout+stderr (`engine.build().logs`), the build-script stdout+stderr (`engine.buildApp().logs`), and the running container's startup stdout+stderr (`engine.logs()`) are all captured into the deployment's event log — install/build **on success too**, not just discarded on the failure path. Each captured line is tagged `[install]`/`[build]`/`[app]`, the last 80 lines per phase are kept (the tail holds the error; each line clipped at 2000 chars), and all of a phase's lines are persisted in one write (`store.appendEvents`). So `GET /api/deployments/:id/logs` → `openpouch logs` shows *why* a deploy is broken (an install error, a failing build, or a server that crashed), making the self-repair loop effective.
+
+**Container profile** (hardened, verified 2026-06-13): `--user <run-d's own uid:gid>` (non-root; matches the bind-mount owner so the build can write `node_modules`) · `--network op-egress` (DNS + outbound 80/443 only) · `--memory 256m --cpus 0.5 --pids-limit 128` (build gets 512m/1cpu) · `--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp` · `-p 127.0.0.1:<hostPort>:8080` · `--restart no`. `HOME=/app`, npm cache → `/tmp`. **The app must listen on `0.0.0.0:$PORT`.**
+
+**Scale-to-zero:** a background loop (every 60 s) stops containers idle > 15 min (`docker stop`, not remove). The next request to that host wakes it inline (`docker start` + health-wait, then proxy). A **running cap** (default 12) bounds RAM; deploying/waking past it LRU-stops the least-recently-used running container. **Expiry/teardown:** the 72 h reaper (and delete/takedown) removes the container, frees the port, and drops the route. **Reconcile on boot:** run-d rebuilds port reservations, recreates containers that vanished (e.g. box reboot — `node_modules` is still on disk), and re-adds all dynamic routes (admin-API routes don't survive a Caddy restart).
+
+**Env vars / secrets (`openpouch deploy --var KEY=value` / `--env-file`).** The CLI sends the app's env vars in the `x-openpouch-env` header (base64 of a JSON map) — never the tarball or the URL. run-d (`server.ts parseEnvHeader`) re-validates them defense-in-depth (key syntax `[A-Za-z_][A-Za-z0-9_]*`, ≤50 vars / ≤4 KB) and passes them to the engine, which injects them as container env `-e KEY=value`. Via the hardened `op-docker` wrapper they travel as base64 `KEY value` lines on an optional 4th `create` arg; the wrapper re-validates each key, **drops reserved `PORT`/`HOME`** (the app must listen on the injected `PORT`), and base64-decodes values into **separate argv elements** (no shell interpolation, no injection). **The values are never logged** — not in the event log, evidence, `inspect`/`logs`, or any response (D7); only NAMES surface (CLI `envVars: [...]`). **Ephemeral by design:** env lives only in the running container — it survives scale-to-zero (`docker stop`/`start` keep the container config) but **NOT** the reconcile-on-boot recreate, which has no env, so after a box reboot a secret-dependent app must be redeployed. This is deliberately **no-secrets-on-disk**; persistent/encrypted secrets (paid lane) are a later increment. **Rollout:** needs the updated `op-docker` wrapper on the box (`scp packages/run/ops/op-docker.sh` → `/usr/local/sbin/op-docker`, root-owned 0755) + a run-d redeploy — owner box steps (D12).
+
+### Routing (`router.ts`, ADR §8A)
+
+run-d sits in the request path **only for dynamic hosts** (to track idle + wake). The static `*.openpouch.sh` `file_server` is **untouched**. For dynamic apps run-d maintains, via the **Caddy admin API** (`127.0.0.1:2019`, no sudo, no reload), one route — host matcher = every live dynamic slug → `reverse_proxy 127.0.0.1:8787` (run-d itself), `terminal`, prepended before the wildcard. run-d then reverse-proxies (zero-dep, `proxy.ts`) to the right container, waking it if stopped. **WebSocket / `Upgrade` connections are proxied too** (`proxyUpgrade` on the server's `upgrade` event: it forwards the handshake — `Connection`/`Upgrade`/`Sec-WebSocket-*` headers — to the container, relays the `101`, and pipes the two sockets bidirectionally; idle-wake applies). Upgrades to the apex/api or a static host are closed. The route is `PATCH`ed in place when it exists, `PUT` (prepended) when it doesn't, and `DELETE`d when no dynamic hosts remain. Every admin-API call sends `Origin: <admin base>` — Caddy's admin endpoint enforces an anti-DNS-rebinding origin check and rejects an empty origin with `403 "origin ''"` (confirmed in the live drill; the loopback Host alone is not enough for `fetch`).
+
+### Dynamic record fields (`store.ts`)
+
+In addition to the M1 fields, a dynamic `DeploymentRecord` carries: `kind: "static" | "dynamic"` (absent in pre-M2 records → defaults static on load), `runtimeStatus: "building" | "running" | "stopped" | "failed"`, `containerId`, `hostPort`, `startCmd` (so reconcile can recreate the container). idle tracking uses an in-memory `lastSeen` map in the orchestrator (reset on boot), **not** a persisted record field.
+
+### Dynamic-lane configuration (env, all defaulted)
+
+`OPENPOUCH_RUN_DYNAMIC_ENABLED` (`1` to enable; default off) · `OPENPOUCH_RUN_MAX_DYNAMIC` (deployment cap, 50) · `OPENPOUCH_RUN_IMAGE` (`node:22-alpine`) · `OPENPOUCH_RUN_CONTAINER_USER` (default = run-d's own `uid:gid`) · `OPENPOUCH_RUN_NETWORK` (`op-egress`) · `OPENPOUCH_RUN_PORT_MIN`/`_MAX` (20000–20999) · `OPENPOUCH_RUN_IDLE_MS` (900000) · `OPENPOUCH_RUN_HEALTH_TIMEOUT_MS` (45000) · `OPENPOUCH_RUN_BUILD_TIMEOUT_MS` (120000) · `OPENPOUCH_RUN_MAX_RUNNING` (12) · `OPENPOUCH_RUN_CADDY_ADMIN` (`http://127.0.0.1:2019`) · `OPENPOUCH_RUN_ROUTE_ID` (`openpouch_dynamic`) · `OPENPOUCH_RUN_CONTAINER_PORT` (8080) · `OPENPOUCH_RUN_MEM`/`_CPUS`/`_BUILD_MEM`/`_BUILD_CPUS`/`_PIDS` · **`OPENPOUCH_RUN_DOCKER_CMD`** (B1 privilege model: empty = drive `docker` directly (dev/tests); on the box set to `sudo /usr/local/sbin/op-docker` so run-d never touches the Docker socket — see §B1).
+
+### Residual risk (honest)
+
+Container escape is rare but non-zero (kernel bugs) — mitigated by cap-drop/seccomp/no-new-privileges/read-only and short TTL; gVisor/Firecracker VM isolation and userns-remap are future hardening, deliberately not in this increment. Outbound abuse within limits (mining/spam) is mitigated (CPU cap + egress filter + short TTL + report/takedown), not eliminated. **run-d (as `oprun`) needs a way to orchestrate containers without being root-equivalent** — the `docker` group (Docker socket = root) was acceptable only for the time-boxed drill. The permanent answer is the **B1 privilege model (§B1)**: a root-owned `op-docker` wrapper behind a one-line sudoers rule, so a run-d compromise can only trigger the fixed, hardened verbs — never arbitrary `docker` flags or host root.
+
+### B1 — privilege model for the dynamic lane (`op-docker` wrapper)
+
+**Goal:** run-d orchestrates containers **without root-equivalence**, while keeping the **egress filter** (the most important control over untrusted outbound traffic). Rootless Docker was evaluated and rejected for now — on Docker 29.5 its userspace networking cannot host our `op-egress` iptables chain, i.e. it trades root-equivalence for *no egress filter* (proposal §2). Chosen instead: a locked-down privileged wrapper (proposal Option B).
+
+- **`oprun` is NOT in the `docker` group** and has no Docker-socket access. It invokes a root-owned wrapper through one sudoers line: `oprun ALL=(root) NOPASSWD: /usr/local/sbin/op-docker`.
+- **The wrapper (`packages/run/ops/op-docker.sh`) exposes only fixed VERBS and builds the hardened `docker` command itself** — run-d can never inject `-v /:/host`, `--privileged`, `--user 0`, `--network host`, the docker socket, etc. Verbs: `build <slug> <installCmd>` · `create <slug> <hostPort> <startCmd>` · `start|stop|rm|state|logs <slug> [tail]`.
+- **Hardening lives in the wrapper, not run-d** (sudo strips run-d's env, so run-d cannot influence the profile). Values default to the §"Container profile" above and may be overridden via `/etc/openpouch-run/op-docker.conf`.
+- **Slug-derived mount (security improvement over the proposal's literal signature):** the wrapper does **not** accept a path. It derives `siteDir` from the validated `slug` (`$SITES_DIR/<slug>`) and canonicalizes both sides to reject any symlink escape — run-d cannot influence the bind-mount source at all. Validation: slug `^[a-z0-9][a-z0-9-]{0,39}$`, hostPort in 20000–20999, tail 1–10000; anything else → exit 2 before docker is touched. The per-app install/start command reaches `sh -c` as a single argv element, so it only ever runs *inside* the sandbox.
+- **run-d side (`engine-wrapper.ts`, `WrapperEngine`):** when `OPENPOUCH_RUN_DOCKER_CMD` is set, run-d builds a `WrapperEngine` that drives those verbs (argv array, never a shell); empty → the direct `DockerEngine` (dev/tests). The container id in wrapper mode is the slug (lifecycle verbs are slug-addressed). Tested in `packages/run/test/wrapper.test.ts` (fixed hardening present, escapes impossible, malformed input rejected, command passed intact).
+
+**Box deployment (DINO-guided, steps 3–4 of proposal §5):** install `op-docker.sh` → `/usr/local/sbin/op-docker` (root:root, `0755`); add the sudoers drop-in; set `OPENPOUCH_RUN_DOCKER_CMD="sudo /usr/local/sbin/op-docker"` in the run-d EnvironmentFile; keep `oprun` **out** of the `docker` group. Re-drill acceptance: a dynamic app still deploys, but `sudo -u oprun docker ps` fails (no socket) — proving root-equivalence is gone while the egress filter (port-25 test) still blocks.
+
+## Server operations (live deployment)
+
+- **Host**: Hetzner CX23 (2 vCPU Intel/x86, 4 GB, Nuremberg `nbg1`), Ubuntu 24.04. x86 chosen so the future container runtime (M2) has no architecture surprises. ~4.75 €/mo.
+- **Services**: `openpouch-run.service` (systemd, runs `node /opt/openpouch-run/start.mjs` as the unprivileged `oprun` user, `ProtectSystem=strict`, `ReadWritePaths=/var/openpouch`); `caddy.service` (TLS + routing).
+- **TLS**: Caddy with the `caddy-dns/cloudflare` plugin solves ACME DNS-01 for `openpouch.sh` + `*.openpouch.sh`. The Cloudflare API token (Zone:DNS:Edit, scoped to openpouch.sh) lives in `/etc/caddy/cloudflare.env` (chmod 600, root), loaded via a systemd `EnvironmentFile` drop-in. `caddy validate` does **not** see that env file — an empty-token error from `validate` is a false alarm; the running service has the token.
+- **DNS**: openpouch.sh delegated to Cloudflare nameservers; apex + wildcard A records → the box (DNS-only / unproxied in M1 so Caddy terminates TLS directly). Firewall (ufw): 22/80/443.
+- **Data**: `/var/openpouch/{sites,data}` owned by `oprun`. `sites/<slug>/` holds the unpacked static files Caddy serves.
+- **Backups**: Hetzner automatic daily backups enabled (window 14–18 UTC).
+- **Monitoring**: on-box watchdog (`openpouch-watch.timer`, every 5 min, runs `watch.sh`): checks `/healthz` and restarts run-d if unhealthy (self-healing, verified live), warns on disk ≥85 %, logs TLS cert days-remaining. systemd `Restart=on-failure` covers crashes; the watchdog covers hung-but-running. **Off-box uptime/alerting is not yet set up** — recommended: a free external monitor (e.g. UptimeRobot) on `https://openpouch.sh/healthz` so a full box outage is noticed (an on-box watchdog can't alert when the box itself is down).
+
+### Caddyfile (essential shape)
+
+```
+openpouch.sh, api.openpouch.sh { tls { dns cloudflare {env.CF_API_TOKEN} } reverse_proxy 127.0.0.1:8787 }
+*.openpouch.sh {
+    tls { dns cloudflare {env.CF_API_TOKEN} }
+    header X-Robots-Tag "noindex, nofollow"
+    root * /var/openpouch/sites/{labels.2}
+    file_server
+    handle_errors { respond "…gone or never existed…" 410 }
+}
+```
+
+**M2 routing:** the static block above is unchanged. With the dynamic lane on, run-d adds one extra route for dynamic slugs via the Caddy **admin API** (enabled by default at `127.0.0.1:2019`) — no Caddyfile edit, no `systemctl reload`. The admin endpoint must stay localhost-only (Caddy's default). See §M2 → Routing.
+
+## Live verification (2026-06-13)
+
+`openpouch deploy` from an empty folder against the live box → `joey-demo-ambj6v.openpouch.sh` returned **HTTP 200** over a real Let's Encrypt wildcard cert, `X-Robots-Tag: noindex` present, manifest/policy/evidence written. `openpouch inspect` read it back through the adapter (provider `openpouch-run`, status ok). Claim extended the TTL to 7 days and issued a mgmt token; an unknown subdomain returned **410**; `DELETE` with the mgmt token removed it (then **410**). Test deployment cleaned up afterwards.
+
+## Surfaces
+
+The apex `https://openpouch.sh/` serves a branded landing page (the one-command pitch); `GET /claim/:id?token=…` is a styled page with a working claim button (client-side `fetch` POST to the claim API, then shows the management token). Both are dependency-free HTML strings rendered by run-d, served with `noindex`. These are **USER surfaces** (the developer) — the full "built for agents" branding is intended here.
+
+**White-label end-customer surfaces (D24 / PRD R11).** Surfaces an END CUSTOMER reaches at `<slug>.openpouch.sh` are neutral — no openpouch/agent branding, no internal detail. The branded apex landing is gated behind `isApexHost` (bare `openpouch.sh` / `www.`): a `<slug>` subdomain whose record is gone returns a neutral `404` "This site is no longer available" instead of falling through to the landing (the fixed leak). A dynamic app whose container is down/failing returns a neutral `502` ("Site temporarily unavailable") — both the `proxyRequest` unreachable path (via an injected `onUnavailable`) and the idle-wake error funnel to one white-label page; the cause is logged server-side only (D7). Caddy's `X-Robots-Tag: noindex` on a served preview and the static `410 "…gone or never existed…"` are brand-free already; the full white-label lever for the noindex hint is **custom domains** (§Beyond M2).
+
+## Beyond M2 (planned)
+
+**Production hosting — live vs planned (an honest split).** Governed **bring-your-own production** is live today: `openpouch preview`/`prod` deploy to your own Render/Vercel behind the human-approval gate (the governed lane). openpouch's **own** persistent/production hosting — a durable, non-ephemeral home on openpouch infra, vs. today's 72 h ephemeral previews — is the **paid managed lane, planned, not yet live** (B4). So "production" is reachable via BYO adapters now; openpouch-hosted persistent production is on the roadmap.
+
+Also planned: claim email/lead capture, SQLite registry, Cloudflare proxy (orange-cloud) hardening, multi-box scale, native-build support (drop `--ignore-scripts`), and stronger isolation (gVisor/Firecracker, userns-remap). The Node/container runtime for dynamic apps is **M2 (BUILT + LIVE)**; the items in this paragraph are still planned. See the architecture proposal in the business SSOT.
