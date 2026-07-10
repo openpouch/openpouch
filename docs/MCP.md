@@ -1,20 +1,47 @@
 # MCP server specification — tool by tool
 
-**Derived from:** `packages/mcp/src/server.ts` · **As of:** 2026-07-06 · Transport: **stdio** (open MCP standard — works with any MCP client; harness neutrality is design rule D13).
+**Derived from:** `packages/mcp/src/server.ts` · **As of:** 2026-07-06 · Transport: **stdio** (open MCP standard — works
+with any MCP client; harness neutrality is design rule D13).
 
-Start (published path): **`npx -y @openpouch/mcp`** — a 0-dependency stdio server, instant via npx, no clone needed. `--version` / `--help` print the version and setup guidance (on 0.2.15 and earlier they exit 0 silently — not a hang); **without flags the binary speaks MCP on stdio and is deliberately quiet on stdout until a client connects**, so register it in a harness rather than running it by hand. Copy-paste harness config blocks (Claude Code, Codex, Cursor, Windsurf) are in the package README and [HARNESSES.md](HARNESSES.md). *(`@openpouch/mcp` is **published and live on npm** and listed in the MCP registry (`io.github.openpouch/openpouch`, status active). The current version is whatever `npm view @openpouch/mcp version` says — it is released in lockstep with the `openpouch` CLI, and this doc deliberately carries no hard-coded number (a stale one reads as untrustworthy to agents — Hermes 2026-07-04). `npm run build:release` builds `release/openpouch-mcp/openpouch-mcp.js` alongside the CLI (publish steps: internal release runbook, RELEASE.md — not part of the public tree). From a monorepo checkout you can also run it directly: `node packages/mcp/bin/openpouch-mcp.js` after `npm run build`.)*
+Start (published path): **`npx -y @openpouch/mcp`** — a 0-dependency stdio server, instant via npx, no clone needed.
+`--version` / `--help` print the version and setup guidance (on 0.2.15 and earlier they exit 0 silently — not a hang);
+**without flags the binary speaks MCP on stdio and is deliberately quiet on stdout until a client connects**, so
+register it in a harness rather than running it by hand. Copy-paste harness config blocks (Claude Code, Codex, Cursor,
+Windsurf) are in the package README and [HARNESSES.md](HARNESSES.md). *(`@openpouch/mcp` is **published and live on
+npm** and listed in the MCP registry (`io.github.openpouch/openpouch`, status active). The current version is whatever
+`npm view @openpouch/mcp version` says — it is released in lockstep with the `openpouch` CLI, and this doc deliberately
+carries no hard-coded number (a stale one reads as untrustworthy to agents — Hermes 2026-07-04). `npm run build:release`
+builds `release/openpouch-mcp/openpouch-mcp.js` alongside the CLI (publish steps: internal release runbook, RELEASE.md —
+not part of the public tree). From a monorepo checkout you can also run it directly: `node
+packages/mcp/bin/openpouch-mcp.js` after `npm run build`.)*
 
 ## Design rules
 
-1. Every tool wraps the same command functions as the CLI (`@openpouch/cli` exports) — no shell round-trip, no behavior drift between CLI and MCP.
-2. **Tool result content blocks (PRD R3):** the result carries the command's `--json` payload as a text content block (one JSON object; the same contract as CLI `--json`, including the top-level `summary` field — D13). The one field that differs: the optional `feedbackHint` (R10.1) is added only in the CLI's `render()` and is **not** present on MCP results; every other field is identical. When a `summary` is present it is **prepended as a second leading text block** of the form `Relay this to your human:\n<summary>`, so the agent sees the relay-ready, jargon-free text first and passes it to its (often non-technical) human. Non-zero exit → `isError: true`. Parsing tip: the JSON payload is the block whose text starts with `{`.
-3. **There is intentionally NO approve tool.** Approving production actions is human-only (interactive terminal; hosted approvals in phase 1.5). `openpouch_deploy_production` returns `approvalRequest{id}` (with a `summary` telling the human how to approve) and instructs the agent to ask its human.
-4. All tools accept optional `cwd` (project directory; default: server cwd) **EXCEPT `openpouch_whoami`/`openpouch_list`/`openpouch_delete`** — those are account-scoped or slug-only and take no project dir.
-5. **The live link is the primary result (PRD R5):** on a successful `deploy_preview`/`deploy_production` the live URL is at top-level `url` in the JSON; the instant lane (`openpouch deploy`, CLI-only) also adds top-level `claimUrl`.
+1. Every tool wraps the same command functions as the CLI (`@openpouch/cli` exports) — no shell round-trip, no behavior
+   drift between CLI and MCP.
+2. **Tool result content blocks (PRD R3):** the result carries the command's `--json` payload as a text content block
+   (one JSON object; the same contract as CLI `--json`, including the top-level `summary` field — D13). The one field
+   that differs: the optional `feedbackHint` (R10.1) is added only in the CLI's `render()` and is **not** present on MCP
+   results; every other field is identical. When a `summary` is present it is **prepended as a second leading text
+   block** of the form `Relay this to your human:\n<summary>`, so the agent sees the relay-ready, jargon-free text first
+   and passes it to its (often non-technical) human. Non-zero exit → `isError: true`. Parsing tip: the JSON payload is
+   the block whose text starts with `{`.
+3. **There is intentionally NO approve tool.** Approving production actions is human-only (interactive terminal; hosted
+   approvals in phase 1.5). `openpouch_deploy_production` returns `approvalRequest{id}` (with a `summary` telling the
+   human how to approve) and instructs the agent to ask its human.
+4. All tools accept optional `cwd` (project directory; default: server cwd) **EXCEPT
+   `openpouch_whoami`/`openpouch_list`/`openpouch_delete`** — those are account-scoped or slug-only and take no project
+   dir.
+5. **The live link is the primary result (PRD R5):** on a successful `deploy_preview`/`deploy_production` the live URL
+   is at top-level `url` in the JSON; the instant lane (`openpouch deploy`, CLI-only) also adds top-level `claimUrl`.
 
 ## Tools
 
-**All 13 tool names in one line** (authoritative name inventory — if your fetcher mangles the wide table rows below, trust this line and confirm with the shell probe in §Smoke-test): `openpouch_init`, `openpouch_inspect`, `openpouch_plan`, `openpouch_deploy`, `openpouch_deploy_preview`, `openpouch_deploy_production`, `openpouch_verify`, `openpouch_logs`, `openpouch_rollback`, `openpouch_whoami`, `openpouch_list`, `openpouch_delete`, `openpouch_list_approvals` — and deliberately **no** `openpouch_approve`.
+**All 13 tool names in one line** (authoritative name inventory — if your fetcher mangles the wide table rows below,
+trust this line and confirm with the shell probe in §Smoke-test): `openpouch_init`, `openpouch_inspect`,
+`openpouch_plan`, `openpouch_deploy`, `openpouch_deploy_preview`, `openpouch_deploy_production`, `openpouch_verify`,
+`openpouch_logs`, `openpouch_rollback`, `openpouch_whoami`, `openpouch_list`, `openpouch_delete`,
+`openpouch_list_approvals` — and deliberately **no** `openpouch_approve`.
 
 | Tool | Inputs (besides `cwd`) | Wraps | Notes |
 |---|---|---|---|
@@ -32,7 +59,10 @@ Start (published path): **`npx -y @openpouch/mcp`** — a 0-dependency stdio ser
 | `openpouch_delete` | `slug: string` | `deleteCommand` | delete one of your OWN apps → frees a quota slot (Befund #8); owner-only (account key, server-verified); an ephemeral preview is not a production action → no approval (D13) |
 | `openpouch_list_approvals` | — | `approveCommand(undefined)` | list pending only — approving is not exposed |
 
-**Account signup/activation are deliberately CLI + web only** (they involve a human email or browser step, SSOT D16) — not MCP tools. `openpouch_whoami`, `openpouch_list`, and `openpouch_delete` are the account-surface tools exposed to agents (whoami + list are read-only; delete is self-service quota management on an ephemeral preview — not a governed-production action, so it needs no approval). There is still no approve tool (D13).
+**Account signup/activation are deliberately CLI + web only** (they involve a human email or browser step, SSOT D16) —
+not MCP tools. `openpouch_whoami`, `openpouch_list`, and `openpouch_delete` are the account-surface tools exposed to
+agents (whoami + list are read-only; delete is self-service quota management on an ephemeral preview — not a
+governed-production action, so it needs no approval). There is still no approve tool (D13).
 
 `environment` enum: `preview | production` — the two environments openpouch creates and governs; the MCP enum deliberately doesn't advertise other names an agent could pick but nothing produces (e.g. `staging`), R9.9. When **omitted**, the target is resolved from `deploy.manifest.json` via the same helper the CLI uses (`targetEnvironment`): `production` if the manifest has one, else the single mapped env (e.g. an instant-lane `preview`), else `preview` — so CLI and MCP defaults can't diverge (R9.8). It is **not** a hard `production` default.
 
@@ -48,7 +78,8 @@ Some harnesses cannot attach a new MCP server mid-session (reported independentl
 
 ```sh
 ( printf '%s\n' \
-    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+\
     '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'; sleep 2 ) \
   | npx -y @openpouch/mcp 2>/dev/null \
   | grep -o '"name":"openpouch_[a-z_]*"' | sort -u

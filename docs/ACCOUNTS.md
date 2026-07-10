@@ -1,36 +1,52 @@
 # ACCOUNTS — account / API-key / quota subsystem (B3)
 
-**As of:** 2026-07-02 · **Status:** LIVE — server-side rollout 2026-06-30, email signup live 2026-07-01; GitHub-OAuth = owner-config (verify on box). Derived from the actual code in `packages/run/src/` + `packages/adapter-run/` + `packages/cli/`. On any conflict, code + tests win and this doc must be fixed.
+**As of:** 2026-07-02 · **Status:** LIVE — server-side rollout 2026-06-30, email signup live 2026-07-01; GitHub-OAuth =
+owner-config (verify on box). Derived from the actual code in `packages/run/src/` + `packages/adapter-run/` +
+`packages/cli/`. On any conflict, code + tests win and this doc must be fixed.
 
-Business rationale + decision live in openpouch's internal decision log: the auth model, launch gating, and the product requirements for agent-first access, abuse control, and no anti-agent barriers.
+Business rationale + decision live in openpouch's internal decision log: the auth model, launch gating, and the product
+requirements for agent-first access, abuse control, and no anti-agent barriers.
 
 ---
 
 ## 1. Why this exists
 
-The instant lane runs anonymous third-party code on openpouch's own (paid) infra. To make that abuse-controllable — and to support paid tiers + billing later — deployments need to be attributable to an **account** with **quotas**. SSOT D16 fixes the model:
+The instant lane runs anonymous third-party code on openpouch's own (paid) infra. To make that abuse-controllable — and
+to support paid tiers + billing later — deployments need to be attributable to an **account** with **quotas**. SSOT D16
+fixes the model:
 
-- **Agent / daily-operation auth = an openpouch API key.** Headless, durable, no OAuth dance, no CAPTCHA — 1:1 with PRD R8.
+- **Agent / daily-operation auth = an openpouch API key.** Headless, durable, no OAuth dance, no CAPTCHA — 1:1 with PRD
+  R8.
 - **Account anchor = email OR GitHub** (the human picks; billing/recovery hang off the account).
 - **Tiers** with a configurable quota **mechanism**; exact numbers + prices stay open until dogfood (D16).
 
 ### Design: tiered, key-optional access (the R5/R8 ↔ D16 reconciliation)
 
-PRD R5/R8 are non-negotiable: "say deploy → the agent deploys, no setup, no account friction," and never a human check. D16 asks for the account/key/quota mechanism and "anonymous instant lane → key-gated." These are reconciled as **tiered, key-optional** access:
+PRD R5/R8 are non-negotiable: "say deploy → the agent deploys, no setup, no account friction," and never a human check.
+D16 asks for the account/key/quota mechanism and "anonymous instant lane → key-gated." These are reconciled as **tiered,
+key-optional** access:
 
-1. **No `Authorization` header → the anonymous tier.** Exactly today's behaviour: per-IP rate limiter + the global caps. Deploying needs no account (R5 intact).
-2. **A valid API key → that key's account tier.** Higher/configurable quotas, the deployment is owned by the account, usage is metered per account (billing later).
-3. **`requireKey` (config, default OFF)** can gate the whole lane behind a key — an abuse lever. Even then it is a **401 with a create-a-key fix**, never a CAPTCHA (R8). This is the "key-gated" capability D16 asks for, built as a mechanism without breaking R5 by default.
+1. **No `Authorization` header → the anonymous tier.** Exactly today's behaviour: per-IP rate limiter + the global caps.
+   Deploying needs no account (R5 intact).
+2. **A valid API key → that key's account tier.** Higher/configurable quotas, the deployment is owned by the account,
+   usage is metered per account (billing later).
+3. **`requireKey` (config, default OFF)** can gate the whole lane behind a key — an abuse lever. Even then it is a **401
+   with a create-a-key fix**, never a CAPTCHA (R8). This is the "key-gated" capability D16 asks for, built as a
+   mechanism without breaking R5 by default.
 
-A presented-but-unresolvable credential (invalid / revoked / suspended) is a **401**, never a silent downgrade to anonymous (HTTP norm; prevents a suspended account from quietly continuing as anonymous on its own quota).
+A presented-but-unresolvable credential (invalid / revoked / suspended) is a **401**, never a silent downgrade to
+anonymous (HTTP norm; prevents a suspended account from quietly continuing as anonymous on its own quota).
 
 ---
 
 ## 2. Data model
 
-Server-side state owned by the single run-d process, persisted as one JSON file written atomically (temp + rename), the same local-first pattern as the deployment registry. Zero native deps (`node:crypto` only). File: `<dataDir>/accounts.json` (`{ version, accounts[], keys[] }`). SQLite is a planned hardening step if volume needs it.
+Server-side state owned by the single run-d process, persisted as one JSON file written atomically (temp + rename), the
+same local-first pattern as the deployment registry. Zero native deps (`node:crypto` only). File:
+`<dataDir>/accounts.json` (`{ version, accounts[], keys[] }`). SQLite is a planned hardening step if volume needs it.
 
-> Accounts are **not** repo files (unlike `deploy.manifest.json` etc. in [DATA-MODEL.md](DATA-MODEL.md)) — they are box-server truth. This is the deliberate SSOT partition.
+> Accounts are **not** repo files (unlike `deploy.manifest.json` etc. in [DATA-MODEL.md](DATA-MODEL.md)) — they are
+box-server truth. This is the deliberate SSOT partition.
 
 ### `AccountRecord` (`packages/run/src/accounts.ts`)
 
@@ -118,7 +134,8 @@ Pure functions (no I/O, caller passes `now`) so the window math is exhaustively 
 
 ### `checkQuota(tier, usage, { now, bytes, dynamic })`
 
-Returns `{ ok: true }` or `{ ok: false, reason, status, message, fix, retryAfterMs? }`. Checks in order, every denial agent-readable:
+Returns `{ ok: true }` or `{ ok: false, reason, status, message, fix, retryAfterMs? }`. Checks in order, every denial
+agent-readable:
 
 | Order | Reason | HTTP | When |
 |---|---|---|---|
@@ -145,7 +162,12 @@ Base URL = run-d origin (e.g. `https://openpouch.sh`). Every account route is ag
 
 `devVerifyToken`/`devVerifyUrl` appear **only** when `OPENPOUCH_RUN_DEV_TOKENS=1` (local/dogfood, since the placeholder mailer doesn't send real email — never enable in production). The first API key is minted on verify and returned **once**.
 
-**`409 exists` fires only for a VERIFIED (or GitHub-linked) email** — one already in the identity index. A repeat `POST /api/accounts` for an email that is still **pending** (signed up but never verified) does **not** create a second account: `createPendingEmail` finds the existing pending record via `findPendingByEmail`, refreshes its verification token + expiry in place, and returns it (`201`, same `accountId`). This both prevents duplicate pending accounts from piling up and doubles as "resend the verification link" (the previously-sent link is superseded). The email send is still per-IP rate-limited.
+**`409 exists` fires only for a VERIFIED (or GitHub-linked) email** — one already in the identity index. A repeat `POST
+/api/accounts` for an email that is still **pending** (signed up but never verified) does **not** create a second
+account: `createPendingEmail` finds the existing pending record via `findPendingByEmail`, refreshes its verification
+token + expiry in place, and returns it (`201`, same `accountId`). This both prevents duplicate pending accounts from
+piling up and doubles as "resend the verification link" (the previously-sent link is superseded). The email send is
+still per-IP rate-limited.
 
 ### Signup (GitHub path) — dormant unless configured
 

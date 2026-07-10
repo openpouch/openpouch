@@ -1,10 +1,16 @@
 # Architecture
 
-**As of:** 2026-07-02 (instant lane M1 **+ M2 both LIVE** on the production box; B3 account/API-key/quota subsystem live; npm `openpouch@0.2.10` + `@openpouch/mcp@0.2.10`, `0.2.11` pending on main) · Build status per package is marked BUILT / PLANNED.
+**As of:** 2026-07-02 (instant lane M1 **+ M2 both LIVE** on the production box; B3 account/API-key/quota subsystem
+live; npm `openpouch@0.2.10` + `@openpouch/mcp@0.2.10`, `0.2.11` pending on main) · Build status per package is marked
+BUILT / PLANNED.
 
 ## Shape
 
-Local-first control plane (SSOT decision D5): the CLI and MCP server run on the agent's machine; durable state lives as files in the **user's repo** (see DATA-MODEL.md); provider credentials stay in the user's env/keychain. The OSS core (CLI/MCP) needs no server. **The product itself is openpouch's own agent-native hosting** — `run-d`, also in this repo, live as the instant lane (SSOT **D14**); the same local-first CLI/MCP drives it and any optional BYO provider identically. A managed paid tier (team sync, approvals, audit) follows without changing the file formats.
+Local-first control plane (SSOT decision D5): the CLI and MCP server run on the agent's machine; durable state lives as
+files in the **user's repo** (see DATA-MODEL.md); provider credentials stay in the user's env/keychain. The OSS core
+(CLI/MCP) needs no server. **The product itself is openpouch's own agent-native hosting** — `run-d`, also in this repo,
+live as the instant lane (SSOT **D14**); the same local-first CLI/MCP drives it and any optional BYO provider
+identically. A managed paid tier (team sync, approvals, audit) follows without changing the file formats.
 
 ```
 agent (Claude Code / Cursor / …)
@@ -28,14 +34,19 @@ adapter-render  adapter-vercel  adapter-run    [render/vercel live-verified;
    └── BYO lane: user's own account ──┘   └── Instant lane: openpouch infra ──┘
 ```
 
-Files written into the user's repo: `deploy.manifest.json`, `deploy.policy.json`, `deploy.evidence.json` (+ human-readable `DEPLOYMENT.md`, week 2). These are the deployment memory agents read after context loss — and an open format third parties can adopt.
+Files written into the user's repo: `deploy.manifest.json`, `deploy.policy.json`, `deploy.evidence.json` (+
+human-readable `DEPLOYMENT.md`, week 2). These are the deployment memory agents read after context loss — and an open
+format third parties can adopt.
 
 ## Design principles (binding)
 
-1. **Policy before action:** every state-changing operation passes `evaluateAction` first; "requires-approval" routes through the approval flow (week 2: signed web link + CLI).
+1. **Policy before action:** every state-changing operation passes `evaluateAction` first; "requires-approval" routes
+   through the approval flow (week 2: signed web link + CLI).
 2. **Secrets never cross boundaries:** adapters expose env var names/presence only; schemas reject value-bearing fields.
-3. **Machine-readable everything:** `--json` on every CLI command; classified errors with fix hints; meaningful exit codes.
-4. **Provider neutrality:** core knows the adapter contract, not providers; adding a provider = new adapter package, no core change beyond the `PROVIDER_IDS` enum.
+3. **Machine-readable everything:** `--json` on every CLI command; classified errors with fix hints; meaningful exit
+   codes.
+4. **Provider neutrality:** core knows the adapter contract, not providers; adding a provider = new adapter package, no
+   core change beyond the `PROVIDER_IDS` enum.
 5. **Idempotent & resumable:** commands re-derive state from the manifest + provider APIs; safe to retry.
 
 ## Delivery lanes (SSOT D11)
@@ -48,9 +59,20 @@ Files written into the user's repo: `deploy.manifest.json`, `deploy.policy.json`
 
 ## Toolchain
 
-npm workspaces monorepo · TypeScript ^5.5 strict, ES2022, NodeNext ESM, `noUncheckedIndexedAccess` · zod ^3.25 (only runtime dep) · vitest ^3 · Node ≥ 20 (developed on 22.16) · License Apache-2.0 (final, 2026-06-12; `LICENSE` + `NOTICE` at repo root).
+npm workspaces monorepo · TypeScript ^5.5 strict, ES2022, NodeNext ESM, `noUncheckedIndexedAccess` · zod ^3.25 (only
+runtime dep) · vitest ^3 · Node ≥ 20 (developed on 22.16) · License Apache-2.0 (final, 2026-06-12; `LICENSE` + `NOTICE`
+at repo root).
 
-**Build pipeline (BUILT 2026-06-12):** TypeScript project references — `npm run build` = `tsc -b tsconfig.build.json` compiles each package `src/` → `dist/` (NodeNext ESM + `.d.ts` + source maps) in dependency order (core → adapters → cli → mcp). Package `exports` point at `dist/` (`types` + `default`); the bin launchers are plain Node scripts importing the compiled output — **tsx is no longer a dependency**. A launcher without a build exits 1 with a `npm run build` hint. Gate 1 (typecheck via root `paths` → src) and gate 2 (vitest via `vitest.config.ts` aliases → src) run on the sources and never require a build. **Release/publish** is a second, separate step: `npm run build:release` = `tsc -b` then `node release/build.mjs`, which uses **esbuild** to bundle the `openpouch` CLI and `@openpouch/mcp` server each into one dependency-free ESM file (inlining the private `@openpouch/*` packages + zod + the MCP SDK, injecting the published version via esbuild `define`). Full publish process in the internal release runbook (file RELEASE.md, not part of the public tree).
+**Build pipeline (BUILT 2026-06-12):** TypeScript project references — `npm run build` = `tsc -b tsconfig.build.json`
+compiles each package `src/` → `dist/` (NodeNext ESM + `.d.ts` + source maps) in dependency order (core → adapters → cli
+→ mcp). Package `exports` point at `dist/` (`types` + `default`); the bin launchers are plain Node scripts importing the
+compiled output — **tsx is no longer a dependency**. A launcher without a build exits 1 with a `npm run build` hint.
+Gate 1 (typecheck via root `paths` → src) and gate 2 (vitest via `vitest.config.ts` aliases → src) run on the sources
+and never require a build. **Release/publish** is a second, separate step: `npm run build:release` = `tsc -b` then `node
+release/build.mjs`, which uses **esbuild** to bundle the `openpouch` CLI and `@openpouch/mcp` server each into one
+dependency-free ESM file (inlining the private `@openpouch/*` packages + zod + the MCP SDK, injecting the published
+version via esbuild `define`). Full publish process in the internal release runbook (file RELEASE.md, not part of the
+public tree).
 
 ## Repo layout (actual)
 

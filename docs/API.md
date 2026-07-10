@@ -1,6 +1,8 @@
 # API reference — `@openpouch/core`
 
-**Derived from:** `packages/core/src/index.ts` exports · **As of:** 2026-07-02 · Package is `private: true` (bundled into `openpouch`, not published standalone), ESM. Source entry `src/index.ts`; the package `exports["."]` resolves to the compiled `./dist/index.js` (types `./dist/index.d.ts`) — so a consumer imports the built output, not `src`.
+**Derived from:** `packages/core/src/index.ts` exports · **As of:** 2026-07-02 · Package is `private: true` (bundled
+into `openpouch`, not published standalone), ESM. Source entry `src/index.ts`; the package `exports["."]` resolves to
+the compiled `./dist/index.js` (types `./dist/index.d.ts`) — so a consumer imports the built output, not `src`.
 
 ## Manifest (`manifest.ts`)
 
@@ -52,7 +54,8 @@ interface ProviderAdapter {
   getEnvVarNames(serviceId: string): Promise<EnvVarStatus[]>; // names/presence ONLY — never values
   getLogs(serviceId: string, opts?: { limit?: number }): Promise<LogLine[]>;
   // write path — callers MUST consult evaluateAction first; adapters execute, they do not decide:
-  triggerDeploy(serviceId: string, opts?: { clearCache?: boolean; commitId?: string }): Promise<DeploySummary>; // commitId = provider-portable rollback primitive (redeploy that commit)
+triggerDeploy(serviceId: string, opts?: { clearCache?: boolean; commitId?: string }): Promise<DeploySummary>; //
+commitId = provider-portable rollback primitive (redeploy that commit)
   getDeploy(serviceId: string, deployId: string): Promise<DeploySummary>;
 }
 type AdapterFactory = (config: { apiKey: string; environment?: EnvironmentName }) => ProviderAdapter;

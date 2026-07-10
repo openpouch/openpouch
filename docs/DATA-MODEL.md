@@ -1,10 +1,15 @@
 # Data model — the three openpouch file formats
 
-**Derived from:** `packages/core/src/manifest.ts`, `policy.ts`, `evidence.ts`, `approvals.ts` (zod schemas, v0) · **As of:** 2026-07-02
+**Derived from:** `packages/core/src/manifest.ts`, `policy.ts`, `evidence.ts`, `approvals.ts` (zod schemas, v0) · **As
+of:** 2026-07-02
 
-All three files live in the **user's repo root**. All schemas are **strict**: unknown keys are rejected (this is a security feature — e.g. a `secrets` key in a manifest fails validation). All files share `"version": 0` (literal) and an optional `"$schema"` string.
+All three files live in the **user's repo root**. All schemas are **strict**: unknown keys are rejected (this is a
+security feature — e.g. a `secrets` key in a manifest fails validation). All files share `"version": 0` (literal) and an
+optional `"$schema"` string.
 
-> **Server-side state is separate.** The instant lane's deployment registry and the B3 account/API-key/quota records are **box-server truth**, not repo files — they live in run-d's data dir, documented in [INSTANT-LANE.md](INSTANT-LANE.md) and [ACCOUNTS.md](ACCOUNTS.md). This page covers only the repo-file formats produced/consumed by the local CLI/MCP.
+> **Server-side state is separate.** The instant lane's deployment registry and the B3 account/API-key/quota records are
+**box-server truth**, not repo files — they live in run-d's data dir, documented in [INSTANT-LANE.md](INSTANT-LANE.md)
+and [ACCOUNTS.md](ACCOUNTS.md). This page covers only the repo-file formats produced/consumed by the local CLI/MCP.
 
 ## Shared enums
 
@@ -100,7 +105,9 @@ All three files live in the **user's repo root**. All schemas are **strict**: un
 | `requests[].signature` | string | no | HMAC-SHA256 hex over `id\|action\|environment\|serviceId\|requestedAt\|expiresAt`, keyed by `~/.openpouch/approver.secret` |
 | `requests[].note` | string | no | |
 
-Unlike files 1–3 this is **runtime state**, not repo history: auto-gitignored; the durable audit trail is the `approvedBy`/`notes` fields in `deploy.evidence.json`. Companion artifact: `DEPLOYMENT.md` — human-readable mirror of the evidence file, regenerated on every evidence write; never edit by hand.
+Unlike files 1–3 this is **runtime state**, not repo history: auto-gitignored; the durable audit trail is the
+`approvedBy`/`notes` fields in `deploy.evidence.json`. Companion artifact: `DEPLOYMENT.md` — human-readable mirror of
+the evidence file, regenerated on every evidence write; never edit by hand.
 
 ## Filename constants
 

@@ -2,7 +2,9 @@
 
 **As of:** 2026-07-06 · Technical preview (`openpouch@0.2.15` on npm, `latest`).
 
-These docs are derived from the actual code in this repo. **On any conflict, the code + tests win and the doc must be fixed.** Product and design rationale (the "why") is recorded in openpouch's internal decision log; this folder is the technical truth (the "what" and "how").
+These docs are derived from the actual code in this repo. **On any conflict, the code + tests win and the doc must be
+fixed.** Product and design rationale (the "why") is recorded in openpouch's internal decision log; this folder is the
+technical truth (the "what" and "how").
 
 ## Start here
 
@@ -29,11 +31,22 @@ These docs are derived from the actual code in this repo. **On any conflict, the
 
 ## What's built (technical preview)
 
-- **Core** — manifest/policy schemas, the policy engine (read-only default · previews autonomous · production human-gated), the evidence writer, the provider-adapter interface.
-- **CLI** — `deploy`, `init`, `inspect`, `plan`, `preview`, `prod`, `approve`, `verify`, `logs`, `rollback`, `signup`, `activate`, `whoami`, `feedback`, `--version`; `--json` everywhere, stable exit codes, classified errors with fix hints, a plain-language `summary` for the human, framework auto-detection, and a post-deploy **health gate** (`healthStatus` — a non-200 app is reported `degraded` instead of handing over a dead link).
-- **MCP server** — the same capabilities as tools over stdio; deliberately **no approve tool** (production is human-only, in every interface).
+- **Core** — manifest/policy schemas, the policy engine (read-only default · previews autonomous · production
+  human-gated), the evidence writer, the provider-adapter interface.
+- **CLI** — `deploy`, `init`, `inspect`, `plan`, `preview`, `prod`, `approve`, `verify`, `logs`, `rollback`, `signup`,
+  `activate`, `whoami`, `feedback`, `--version`; `--json` everywhere, stable exit codes, classified errors with fix
+  hints, a plain-language `summary` for the human, framework auto-detection, and a post-deploy **health gate**
+  (`healthStatus` — a non-200 app is reported `degraded` instead of handing over a dead link).
+- **MCP server** — the same capabilities as tools over stdio; deliberately **no approve tool** (production is
+  human-only, in every interface).
 - **Adapters** — Render and Vercel (optional BYO) + the openpouch-run instant-lane adapter.
-- **Instant lane (run-d)** — M1 static previews, live on openpouch's own infrastructure; M2 dynamic Node apps in hardened containers (scale-to-zero, egress-filtered, WebSocket-capable); **server-side build-on-deploy** — a raw Vite/CRA/Svelte source folder or a framework app with a build step is built on the box (`openpouch deploy .`), no local build required; **data-durability detect-and-surface** — a data-writing app is flagged so an ephemeral preview never loses data silently; abuse controls (capacity cap, report + operator takedown); the account / API-key / quota subsystem (key-optional, default-safe).
-- **Open file formats in your repo** — `deploy.manifest.json`, `deploy.policy.json`, `deploy.evidence.json` + `DEPLOYMENT.md`, so any agent can resume after context loss.
+- **Instant lane (run-d)** — M1 static previews, live on openpouch's own infrastructure; M2 dynamic Node apps in
+  hardened containers (scale-to-zero, egress-filtered, WebSocket-capable); **server-side build-on-deploy** — a raw
+  Vite/CRA/Svelte source folder or a framework app with a build step is built on the box (`openpouch deploy .`), no
+  local build required; **data-durability detect-and-surface** — a data-writing app is flagged so an ephemeral preview
+  never loses data silently; abuse controls (capacity cap, report + operator takedown); the account / API-key / quota
+  subsystem (key-optional, default-safe).
+- **Open file formats in your repo** — `deploy.manifest.json`, `deploy.policy.json`, `deploy.evidence.json` +
+  `DEPLOYMENT.md`, so any agent can resume after context loss.
 
 Apache-2.0 — see [../LICENSE](../LICENSE) and [../NOTICE](../NOTICE).
