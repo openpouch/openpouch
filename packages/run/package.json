@@ -1,0 +1,21 @@
+{
+  "name": "@openpouch/run",
+  "version": "0.0.0",
+  "description": "openpouch-run — the instant-lane host daemon (run-d): anonymous ephemeral static previews, deploy-then-claim",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "openpouch-run": "./bin/openpouch-run.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin"
+  ]
+}

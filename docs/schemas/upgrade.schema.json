@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/upgrade.schema.json",
+  "title": "openpouch upgrade result",
+  "description": "`openpouch upgrade --plan <name> --json` / MCP `openpouch_upgrade` (0.3.0+). Payment is deliberately a HUMAN moment: the agent only relays `checkoutUrl`; the human pays in the browser at the Merchant of Record and the account tier updates via signed webhook (verify with whoami). Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "plan", "founderPricing", "checkoutUrl", "humanAction"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string" },
+    "plan": { "type": "string", "description": "The paid tier the checkout is for (e.g. starter, pro, scale, business)." },
+    "founderPricing": { "type": "boolean", "description": "true = this account is in the founder cohort and checks out at launch prices." },
+    "checkoutUrl": { "type": "string", "description": "Hosted-checkout URL — hand it to the human; agents never pay." },
+    "humanAction": { "type": "string", "description": "Plain-language instruction for the human step." }
+  },
+  "additionalProperties": true
+}

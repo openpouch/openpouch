@@ -1,0 +1,13 @@
+{
+  "name": "openpouch",
+  "description": "Agent-native hosting: deploy any app or static site to a live URL in one command — no account, no CAPTCHA. Bundles the openpouch MCP tools and a deploy skill with verify + self-repair workflows.",
+  "version": "0.1.0",
+  "author": {
+    "name": "openpouch",
+    "url": "https://openpouch.dev"
+  },
+  "homepage": "https://openpouch.dev",
+  "repository": "https://github.com/openpouch/claude-plugin",
+  "license": "Apache-2.0",
+  "keywords": ["deploy", "hosting", "deployment", "preview", "mcp", "agent", "static-site", "node"]
+}

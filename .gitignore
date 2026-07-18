@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+.turbo/
+# release bundle artifacts (built by `npm run build:release`, not committed)
+release/openpouch/openpouch.js
+release/openpouch/LICENSE
+release/openpouch/NOTICE
+release/openpouch-mcp/openpouch-mcp.js
+release/openpouch-mcp/LICENSE
+release/openpouch-mcp/NOTICE

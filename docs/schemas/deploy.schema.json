@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/deploy.schema.json",
+  "title": "openpouch deploy result (instant lane success)",
+  "description": "Successful `openpouch deploy [dir] --json` / MCP `openpouch_deploy`. Contract: `required` is guaranteed; results evolve ADDITIVELY. Failures use error.schema.json instead. Claim fields exist ONLY on anonymous deploys (ownership: \"anonymous\") \u2014 there, exactly one of `claimUrl` (default) or `claimUrlRedacted: true` (--redact-secrets / MCP default) is present. An account-owned deploy (ownership: \"account\", since 0.3.1) is already saved: it carries NO claim fields and its `expiresAt` rolls forward while the app is used.",
+  "type": "object",
+  "required": [
+    "ok",
+    "summary",
+    "url",
+    "authenticated",
+    "pending",
+    "healthStatus",
+    "nextCommands",
+    "deployment",
+    "evidence"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "summary": {
+      "type": "string",
+      "description": "Relay verbatim to your human."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "THE primary result: the live, publicly shareable address."
+    },
+    "authenticated": {
+      "type": "boolean",
+      "description": "true = ran under an openpouch account key; false = anonymous free tier."
+    },
+    "ownership": {
+      "enum": [
+        "anonymous",
+        "account"
+      ],
+      "description": "Who the deployment belongs to (since 0.3.1). \"account\" = saved to the key's account: no claim step exists and expiry rolls with use. \"anonymous\" = ephemeral preview with a claim link."
+    },
+    "expiryPolicy": {
+      "enum": [
+        "fixed",
+        "rolling-while-used"
+      ],
+      "description": "How to read `deployment.expiresAt` (since 0.3.1): \"fixed\" = hard deadline (anonymous/claimed); \"rolling-while-used\" = moves forward on every request (account-owned)."
+    },
+    "tellYourUser": {
+      "type": "string",
+      "description": "Ready-to-relay hand-off for the HUMAN (since 0.3.3) \u2014 pass it on verbatim and unprompted: live URL + exact expiry date + every keep option (free save link / free account / paid plans from $15/month with the pricing URL) + doing-nothing-is-fine. Present only on a healthy deploy; never contains the claim link/token."
+    },
+    "claimUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "SECRET save link (carries a one-time token \u2014 treat like a password; hand it to your human PRIVATELY, never into shared reports). The shareable address is `url`, never this. Anonymous deploys only."
+    },
+    "claimUrlRedacted": {
+      "const": true,
+      "description": "Present instead of claimUrl when redaction is on; the real link is stored locally in .openpouch/claim.json (0600, gitignored). Anonymous deploys only."
+    },
+    "claimUrlIsPrivate": {
+      "const": true,
+      "description": "Present exactly when a claim link exists for this deploy (anonymous deploys; no longer emitted on account-owned deploys \u2014 required until 0.3.0, conditional since 0.3.1)."
+    },
+    "envVars": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Env var NAMES set on the app \u2014 values are never echoed anywhere."
+    },
+    "pending": {
+      "type": "boolean",
+      "description": "true = container not answering yet; re-check with `openpouch verify` before sharing."
+    },
+    "healthStatus": {
+      "enum": [
+        "healthy",
+        "degraded",
+        "pending"
+      ],
+      "description": "Post-deploy GET / gate: `healthy` = 200 observed; `degraded` = live but not answering 200 \u2014 do NOT share the URL, run the self-repair loop; `pending` = still starting."
+    },
+    "healthPathCheck": {
+      "type": "object",
+      "description": "Present when --health-path ran: the extra API-route probe (full-stack bar).",
+      "required": [
+        "path",
+        "passed"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "httpStatus": {
+          "type": "number"
+        }
+      }
+    },
+    "nextStep": {
+      "type": "string",
+      "description": "Present on pending/degraded results: the exact next move."
+    },
+    "nextCommands": {
+      "type": "object",
+      "description": "Copy-paste follow-ups, health-path aware \u2014 no flag reconstruction needed.",
+      "required": [
+        "verify",
+        "logs",
+        "inspect"
+      ],
+      "properties": {
+        "verify": {
+          "type": "string"
+        },
+        "logs": {
+          "type": "string"
+        },
+        "inspect": {
+          "type": "string"
+        }
+      }
+    },
+    "dataDurability": {
+      "type": "object",
+      "description": "Present when the app writes local data: an ephemeral preview will NOT keep it \u2014 tell your human plainly.",
+      "required": [
+        "storesData",
+        "ephemeral"
+      ],
+      "properties": {
+        "storesData": {
+          "const": true
+        },
+        "ephemeral": {
+          "const": true
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "required": [
+        "id",
+        "url",
+        "expiresAt",
+        "status",
+        "kind",
+        "framework"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "claimUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Omitted under redaction and on account-owned deploys."
+        },
+        "expiresAt": {
+          "type": "string",
+          "description": "ISO timestamp. Anonymous: hard deadline (~72h unclaimed). Account-owned: rolls forward while the app is used (see `expiryPolicy`)."
+        },
+        "status": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "static",
+            "dynamic"
+          ]
+        },
+        "framework": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "buildCommand": {
+          "type": "string"
+        },
+        "startCommand": {
+          "type": "string"
+        },
+        "httpStatus": {
+          "type": "number"
+        },
+        "app": {
+          "type": "string",
+          "description": "L12: named-app identity, when deployed with --app."
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The truth files written into the repo \u2014 re-reading them is always sufficient to resume."
+    },
+    "feedbackHint": {
+      "type": "string"
+    },
+    "urlStability": {
+      "enum": [
+        "stable",
+        "fresh-per-deploy"
+      ],
+      "description": "L12: whether this URL survives redeploys. 'stable' only for a named app (--app, account required): the same slug is UPDATED in place, health-checked before the swap. 'fresh-per-deploy' is the instant-lane default: every deploy mints a new URL."
+    },
+    "app": {
+      "type": "string",
+      "description": "L12: the named-app identity (account+app). Present only when the deploy ran with --app under an account; redeploys with the same name update the app behind the same URL."
+    },
+    "updated": {
+      "type": "boolean",
+      "description": "L12: true when this deploy UPDATED the existing named app in place (same slug/URL, content swapped after the new version passed its health gate); false on the app's first deploy."
+    },
+    "appNotSupportedByServer": {
+      "type": "boolean",
+      "description": "L12 version skew: --app was requested but the server predates named apps and ignored it \u2014 this deploy got a fresh URL and will NOT update in place."
+    }
+  }
+}

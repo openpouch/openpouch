@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/verify.schema.json",
+  "title": "openpouch verify result",
+  "description": "`openpouch verify --json` / MCP `openpouch_verify`. NOTE: `ok` is the VERDICT here — false means the checks failed (exit 8), while the object still follows this shape (it also carries `error` fields only when the command itself errored, e.g. no manifest — that case uses error.schema.json). Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "environment", "url", "checks", "evidenceUpdated"],
+  "properties": {
+    "ok": { "type": "boolean", "description": "true = every check passed; false = at least one failed — run the self-repair loop, do not share the URL." },
+    "summary": { "type": "string" },
+    "environment": { "type": "string" },
+    "url": { "type": "string", "format": "uri" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "passed"],
+        "properties": {
+          "name": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "detail": { "type": "string" }
+        }
+      },
+      "description": "One entry per probe — always includes GET /; a manifest healthcheck path or --health-path adds its own entry."
+    },
+    "evidenceUpdated": { "type": "boolean", "description": "true = the smoke results were appended to the latest deployment record." }
+  }
+}

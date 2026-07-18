@@ -1,0 +1,29 @@
+{
+  "name": "openpouch-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "openpouch 🦘 — agent-native hosting, built for coding agents (monorepo)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "build:release": "npm run build && node release/build.mjs",
+    "clean": "tsc -b tsconfig.build.json --clean",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "ajv": "^8.20.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0"
+  }
+}

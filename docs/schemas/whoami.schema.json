@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/whoami.schema.json",
+  "title": "openpouch whoami result",
+  "description": "`openpouch whoami --json` / MCP `openpouch_whoami`. `account`/`tier`/`usage` are present exactly when `authenticated` is true. Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": ["ok", "summary", "authenticated"],
+  "properties": {
+    "ok": { "const": true },
+    "summary": { "type": "string" },
+    "authenticated": { "type": "boolean", "description": "false = anonymous free tier (no account key resolved) — deploying still works." },
+    "account": {
+      "type": "object",
+      "required": ["id", "status", "tier", "identities", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string" },
+        "tier": { "type": "string" },
+        "identities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "value"],
+            "properties": { "kind": { "type": "string" }, "value": { "type": "string" }, "label": { "type": "string" } }
+          }
+        },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "tier": {
+      "type": "object",
+      "required": ["name", "deploysPerHour", "deploysPerDay", "maxLiveDeployments", "maxBytes", "maxDynamic"],
+      "properties": {
+        "name": { "type": "string" },
+        "deploysPerHour": { "type": "number" },
+        "deploysPerDay": { "type": "number" },
+        "maxLiveDeployments": { "type": "number" },
+        "maxBytes": { "type": "number" },
+        "maxDynamic": { "type": "number" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["liveDeployments", "dynamicDeployments", "deploysLastHour", "deploysLastDay"],
+      "properties": {
+        "liveDeployments": { "type": "number" },
+        "dynamicDeployments": { "type": "number" },
+        "deploysLastHour": { "type": "number" },
+        "deploysLastDay": { "type": "number" }
+      }
+    }
+  }
+}

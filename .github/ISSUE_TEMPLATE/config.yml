@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability (private)
+    url: https://github.com/openpouch/openpouch/security/advisories/new
+    about: Please DO NOT open a public issue for security problems. Use private reporting (or email security@openpouch.dev) — see SECURITY.md.
+  - name: Question / help (Discussions Q&A)
+    url: https://github.com/openpouch/openpouch/discussions
+    about: Ask setup or usage questions in Discussions — issues are for bugs and concrete proposals.

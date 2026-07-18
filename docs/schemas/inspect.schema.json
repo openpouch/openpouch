@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpouch.dev/docs/schemas/inspect.schema.json",
+  "title": "openpouch inspect result",
+  "description": "`openpouch inspect --json` / MCP `openpouch_inspect` \u2014 the state of everything mapped in deploy.manifest.json, sufficient on its own to know what is live (resume surface). Contract: `required` guaranteed, additive evolution.",
+  "type": "object",
+  "required": [
+    "ok",
+    "summary",
+    "project",
+    "environments",
+    "hints"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "summary": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Primary live URL (production preferred, else preview, else any mapped env with an active non-suspended service URL). Omitted when none is live."
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "name",
+        "framework"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "framework": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "environments": {
+      "type": "object",
+      "description": "One report per mapped environment name.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status",
+          "provider"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "`ok` or `unmapped` (no serviceId yet)."
+          },
+          "provider": {
+            "type": "string"
+          },
+          "service": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "suspended": {
+                "type": "boolean"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          },
+          "liveDeploy": {
+            "type": "object",
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "string"
+              },
+              "commitMessage": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "type": "string",
+                "description": "Instant lane only: when the deployment expires \u2014 live server truth at read time (on a rolling account-owned record this is the CURRENT deadline). Absent on providers without expiry."
+              }
+            }
+          },
+          "envVars": {
+            "type": "object",
+            "required": [
+              "missingRequired"
+            ],
+            "properties": {
+              "runtimeIntrospection": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ],
+                "description": "`unavailable` on the instant lane (the box API can't be asked \u2014 privacy by design): `present`/`extraOnProvider` are then OMITTED entirely; `missingRequired` stays meaningful (computed from local deploy evidence)."
+              },
+              "present": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missingRequired": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "extraOnProvider": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deployProvided": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "NAMES passed via --var/--env-file on the latest deploy (from local evidence)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "hints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

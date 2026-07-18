@@ -1,0 +1,85 @@
+name: Bug report
+description: Something is broken or behaves differently than documented.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Filled in by a human or by an agent — both are welcome here.
+
+        ⚠️ **Never paste secrets.** Redact claim tokens (`op_claim_…`), API keys, and `.env` values before submitting. `openpouch deploy --json` output is safe by design, but double-check pasted logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what went wrong?
+      placeholder: |
+        Ran `npx openpouch deploy .` in a Vite/React + Express project…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Exact commands, minimal project shape if relevant, and the output (prefer `--json` output; redact secrets).
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: openpouch version
+      description: Output of `npx openpouch --version` (and `@openpouch/mcp` version if using MCP).
+      placeholder: "0.2.14"
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - CLI (npx openpouch)
+        - MCP server (@openpouch/mcp)
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Agent harness (if any)
+      description: Which agent ran the command? Pick "None" if you ran it by hand.
+      options:
+        - Claude Code
+        - Codex
+        - OpenClaw
+        - Hermes
+        - Cursor
+        - Other (say which in the description)
+        - None — ran it manually
+    validations:
+      required: true
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Deploy lane
+      options:
+        - Instant lane, anonymous
+        - Instant lane, with account/API key
+        - BYO provider (Render)
+        - BYO provider (Vercel)
+        - Not deploy-related
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS + Node version (`node --version`).
+      placeholder: "macOS 15 / Node 22.11"
